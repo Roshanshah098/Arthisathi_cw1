@@ -1,0 +1,102 @@
+@page "/register"
+@inject IStorageService StorageService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="height: 100vh;">
+    <MudPaper Elevation="3" Class="pa-8" Style="width: 500px;">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">Register</MudText>
+        
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudTextField T="string" 
+                         Label="Username" 
+                         @bind-Value="model.Username"
+                         Class="mt-3"
+                         Required="true" 
+                         RequiredError="Username is required"/>
+                         
+            <MudTextField T="string" 
+                         Label="Password" 
+                         @bind-Value="model.Password"
+                         InputType="InputType.Password"
+                         Class="mt-3"
+                         Required="true" 
+                         RequiredError="Password is required"/>
+                         
+            <MudTextField T="string" 
+                         Label="Confirm Password" 
+                         @bind-Value="confirmPassword"
+                         InputType="InputType.Password"
+                         Class="mt-3"
+                         Required="true" 
+                         RequiredError="Please confirm your password"
+                         Validation="@(new Func<string, string>(ConfirmPasswordValidation))"/>
+
+            <MudSelect T="string" 
+                      Label="Preferred Currency" 
+                      @bind-Value="model.PreferredCurrency" 
+                      Required="true"
+                      RequiredError="Currency is required"
+                      Class="mt-3">
+                <MudSelectItem Value="@("USD")">USD ($)</MudSelectItem>
+                <MudSelectItem Value="@("EUR")">EUR (€)</MudSelectItem>
+                <MudSelectItem Value="@("GBP")">GBP (£)</MudSelectItem>
+                <MudSelectItem Value="@("INR")">INR (₹)</MudSelectItem>
+            </MudSelect>
+
+            <div class="d-flex justify-space-between align-center mt-6">
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary"
+                          OnClick="HandleRegistration"
+                          Size="Size.Large">
+                    Register
+                </MudButton>
+
+                <MudButton Variant="Variant.Text" 
+                          Color="Color.Secondary"
+                          OnClick="@(() => NavigationManager.NavigateTo("/login"))">
+                    Back to Login
+                </MudButton>
+            </div>
+        </MudForm>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private User model = new() { PreferredCurrency = "USD" };
+    private string confirmPassword = "";
+    private bool success;
+    private MudForm form;
+
+    private string? ConfirmPasswordValidation(string value)
+    {
+        if (value != model.Password)
+            return "Passwords do not match";
+        return null;
+    }
+
+    private async Task HandleRegistration()
+    {
+        await form.Validate();
+        if (!success) return;
+
+        try
+        {
+            if (await StorageService.RegisterUser(model))
+            {
+                var state = await StorageService.LoadStateAsync();
+                state.CurrentUser = model;
+                await StorageService.SaveStateAsync(state);
+                NavigationManager.NavigateTo("/dashboard");
+            }
+            else
+            {
+                Snackbar.Add("Username already exists", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("An error occurred during registration. Please try again.", Severity.Error);
+        }
+    }
+}

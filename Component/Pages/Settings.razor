@@ -1,0 +1,223 @@
+@page "/settings"
+@using arthiksathi.Models
+@using arthiksathi.Services
+@inject IStorageService StorageService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-6">
+    <MudCard>
+        <MudCardHeader>
+            <MudText Typo="Typo.h5">Settings</MudText>
+        </MudCardHeader>
+
+        <MudCardContent>
+            <MudForm @ref="form" @bind-IsValid="@success">
+                <MudText Typo="Typo.h6" Class="mb-4">Profile Settings</MudText>
+                
+                <MudSelect T="string" 
+                          Label="Preferred Currency" 
+                          @bind-Value="currentUser.PreferredCurrency"
+                          Required="true"
+                          RequiredError="Currency is required"
+                          Class="mb-4">
+                    <MudSelectItem Value="@("USD")">USD ($)</MudSelectItem>
+                    <MudSelectItem Value="@("EUR")">EUR (€)</MudSelectItem>
+                    <MudSelectItem Value="@("GBP")">GBP (£)</MudSelectItem>
+                    <MudSelectItem Value="@("INR")">INR (₹)</MudSelectItem>
+                </MudSelect>
+
+                <MudDivider Class="my-6"/>
+
+                <MudText Typo="Typo.h6" Class="mb-4">Default Tags</MudText>
+                
+                <div class="d-flex gap-4 align-center mb-4">
+                    <MudTextField @bind-Value="newTag" 
+                                Label="New Tag"
+                                Placeholder="Add a default tag"/>
+                    <MudButton Color="Color.Primary"
+                             Variant="Variant.Filled"
+                             OnClick="AddTag"
+                             Disabled="@(string.IsNullOrWhiteSpace(newTag))">
+                        Add Tag
+                    </MudButton>
+                </div>
+
+               @if (defaultTags.Any())
+{
+    <MudPaper Class="pa-4 mb-6" Elevation="0">
+        <div class="d-flex flex-wrap gap-2">
+            @foreach (var tag in defaultTags)
+            {
+                <MudPaper Elevation="0" 
+                         Class="d-flex gap-2 pa-2" 
+                         Style="background-color: var(--mud-palette-primary-hover); border-radius: 16px;">
+                    <MudText>@tag</MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                                 Size="Size.Small"
+                                 OnClick="@(() => RemoveTag(tag))" />
+                </MudPaper>
+            }
+        </div>
+    </MudPaper>
+}
+
+                <MudDivider Class="my-6"/>
+
+                <MudText Typo="Typo.h6" Class="mb-4">Data Export</MudText>
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudButton Variant="Variant.Filled"
+                                 Color="Color.Primary"
+                                 StartIcon="@Icons.Material.Filled.Download"
+                                 OnClick="ExportToJson"
+                                 FullWidth="true">
+                            Export as JSON
+                        </MudButton>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudButton Variant="Variant.Filled"
+                                 Color="Color.Secondary"
+                                 StartIcon="@Icons.Material.Filled.Download"
+                                 OnClick="ExportToCsv"
+                                 FullWidth="true">
+                            Export as CSV
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        </MudCardContent>
+
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled"
+                      Color="Color.Primary"
+                      OnClick="SaveSettings"
+                      Class="ml-auto">
+                Save Settings
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private User currentUser = new();
+    private List<string> defaultTags = new();
+    private string newTag = "";
+    private bool success;
+    private MudForm form;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await StorageService.LoadStateAsync();
+        if (state.CurrentUser == null)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        currentUser = state.CurrentUser;
+        defaultTags = state.DefaultTags;
+    }
+
+    private void AddTag()
+    {
+        if (string.IsNullOrWhiteSpace(newTag)) return;
+        
+        var trimmedTag = newTag.Trim();
+        if (!defaultTags.Contains(trimmedTag, StringComparer.OrdinalIgnoreCase))
+        {
+            defaultTags.Add(trimmedTag);
+            newTag = "";
+            StateHasChanged();
+        }
+        else
+        {
+            Snackbar.Add("This tag already exists", Severity.Warning);
+        }
+    }
+
+    private void RemoveTag(string tag)
+    {
+        defaultTags.Remove(tag);
+        StateHasChanged();
+    }
+
+    private async Task SaveSettings()
+    {
+        await form.Validate();
+        if (!success) return;
+
+        try
+        {
+            var state = await StorageService.LoadStateAsync();
+            var userIndex = state.Users.FindIndex(u => u.Username == currentUser.Username);
+            if (userIndex != -1)
+            {
+                state.Users[userIndex] = currentUser;
+            }
+            state.DefaultTags = defaultTags;
+            state.CurrentUser = currentUser;
+            
+            await StorageService.SaveStateAsync(state);
+            Snackbar.Add("Settings saved successfully", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to save settings", Severity.Error);
+        }
+    }
+
+    private async Task ExportToJson()
+    {
+        try
+        {
+            var state = await StorageService.LoadStateAsync();
+            var transactions = state.Transactions
+                .Where(t => t.Username == currentUser.Username)
+                .ToList();
+
+            var json = System.Text.Json.JsonSerializer.Serialize(transactions, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            var fileName = $"transactions_{DateTime.Now:yyyyMMdd}.json";
+            var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+            await JSRuntime.InvokeVoidAsync("saveAsFile", fileName, Convert.ToBase64String(bytes));
+            Snackbar.Add("Data exported successfully", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to export data", Severity.Error);
+        }
+    }
+
+    private async Task ExportToCsv()
+    {
+        try
+        {
+            var state = await StorageService.LoadStateAsync();
+            var transactions = state.Transactions
+                .Where(t => t.Username == currentUser.Username)
+                .ToList();
+
+            var csv = new System.Text.StringBuilder();
+            csv.AppendLine("Date,Type,Source,Amount,Tags,Notes,DueDate,IsCleared");
+
+            foreach (var t in transactions)
+            {
+                csv.AppendLine($"{t.Date:yyyy-MM-dd},{t.Type},{t.Source},{t.Amount},\"{string.Join(";", t.Tags)}\",\"{t.Notes}\",{t.DueDate:yyyy-MM-dd},{t.IsCleared}");
+            }
+
+            var fileName = $"transactions_{DateTime.Now:yyyyMMdd}.csv";
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csv.ToString());
+            await JSRuntime.InvokeVoidAsync("saveAsFile", fileName, Convert.ToBase64String(bytes));
+            Snackbar.Add("Data exported successfully", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to export data", Severity.Error);
+        }
+    }
+}

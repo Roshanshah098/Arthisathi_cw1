@@ -1,0 +1,17 @@
+﻿<Router AppAssembly="@typeof(Routes).Assembly">
+    <Found Context="routeData">
+        <MudThemeProvider/>
+        <MudDialogProvider/>
+        <MudSnackbarProvider/>
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <MudContainer Class="mt-16">
+                <MudText Typo="Typo.h3" Align="Align.Center">404 - Page Not Found</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center">The requested page could not be found.</MudText>
+            </MudContainer>
+        </LayoutView>
+    </NotFound>
+</Router>

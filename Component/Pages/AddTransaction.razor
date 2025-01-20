@@ -1,0 +1,238 @@
+@page "/add-transaction"
+@using arthiksathi.Models
+@using arthiksathi.Services
+@inject ITransactionService TransactionService
+@inject IStorageService StorageService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-6">
+    <MudCard>
+        <MudCardHeader>
+            <MudText Typo="Typo.h5">Add Transaction</MudText>
+        </MudCardHeader>
+
+        <MudCardContent>
+            <MudForm @ref="form" @bind-IsValid="@success">
+                <MudSelect T="TransactionType" 
+                          Label="Transaction Type" 
+                          @bind-Value="transaction.Type"
+                          Required="true"
+                          RequiredError="Transaction type is required"
+                          Class="mb-4">
+                    <MudSelectItem Value="TransactionType.Credit">Credit</MudSelectItem>
+                    <MudSelectItem Value="TransactionType.Debit">Debit</MudSelectItem>
+                    <MudSelectItem Value="TransactionType.Debt">Debt</MudSelectItem>
+                </MudSelect>
+
+                <MudTextField T="string" 
+                            Label="Source" 
+                            @bind-Value="transaction.Source"
+                            Required="true"
+                            RequiredError="Source is required"
+                            Class="mb-4"/>
+
+                <MudNumericField T="decimal" 
+                               Label="Amount" 
+                               @bind-Value="transaction.Amount"
+                               Required="true"
+                               RequiredError="Amount is required"
+                               Min="0"
+                               Format="N2"
+                               Class="mb-4"/>
+
+                <MudDatePicker Label="Date" 
+                             Date="transaction.Date"
+                             DateChanged="DateChanged"
+                             Required="true"
+                             RequiredError="Date is required"
+                             Class="mb-4"/>
+
+                @if (transaction.Type == TransactionType.Debt)
+                {
+                    <MudDatePicker Label="Due Date" 
+                                 Date="transaction.DueDate"
+                                 DateChanged="DueDateChanged"
+                                 Required="true"
+                                 RequiredError="Due date is required for debt"
+                                 Class="mb-4"
+                                 MinDate="@DateTime.Today"/>
+                }
+
+                <MudTextField T="string" 
+                            Label="Notes" 
+                            @bind-Value="transaction.Notes"
+                            Lines="3"
+                            Class="mb-4"/>
+
+                <MudSelect T="string" 
+                          Label="Tags" 
+                          MultiSelection="true"
+                          @bind-SelectedValues="selectedTags"
+                          Class="mb-4">
+                    @foreach (var tag in defaultTags)
+                    {
+                        <MudSelectItem Value="@tag">@tag</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <div class="d-flex gap-4 align-center mb-4">
+                    <MudTextField T="string" 
+                                @bind-Value="newTag"
+                                Label="Custom Tag"
+                                Placeholder="Add a custom tag"/>
+                    <MudButton Color="Color.Primary"
+                             Variant="Variant.Filled"
+                             OnClick="AddCustomTag"
+                             Disabled="@(string.IsNullOrWhiteSpace(newTag))">
+                        Add Tag
+                    </MudButton>
+                </div>
+
+                @if (selectedTags.Any())
+                {
+                    <MudPaper Class="pa-4 mb-4" Elevation="0">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Selected Tags:</MudText>
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var tag in selectedTags)
+                            {
+                                <MudButton Size="Size.Small"
+                                          Color="Color.Primary"
+                                          Variant="Variant.Filled"
+                                          OnClick="@(() => RemoveTag(tag))"
+                                          EndIcon="@Icons.Material.Filled.Close">
+                                    @tag
+                                </MudButton>
+                            }
+                        </div>
+                    </MudPaper>
+                }
+            </MudForm>
+        </MudCardContent>
+
+        <MudCardActions>
+            <MudButton Variant="Variant.Text" 
+                      OnClick="@(() => NavigationManager.NavigateTo("/transactions"))">
+                Cancel
+            </MudButton>
+            <MudSpacer />
+            <MudButton Variant="Variant.Filled" 
+                      Color="Color.Primary"
+                      OnClick="HandleSubmit"
+                      Disabled="@(!success)">
+                Save Transaction
+            </MudButton>
+        </MudCardActions>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private Transaction transaction = new() { Date = DateTime.Today };
+    private bool success;
+    private MudForm form;
+    private IEnumerable<string> selectedTags = new HashSet<string>();
+    private List<string> defaultTags = new();
+    private string newTag = "";
+    private User? currentUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await StorageService.LoadStateAsync();
+        currentUser = state.CurrentUser;
+        
+        if (currentUser == null)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        defaultTags = state.DefaultTags;
+    }
+
+    private void DateChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            transaction.Date = date.Value;
+            StateHasChanged();
+        }
+    }
+
+    private void DueDateChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            transaction.DueDate = date.Value;
+            StateHasChanged();
+        }
+    }
+
+    private void AddCustomTag()
+    {
+        if (string.IsNullOrWhiteSpace(newTag)) return;
+        
+        var trimmedTag = newTag.Trim();
+        if (!defaultTags.Contains(trimmedTag, StringComparer.OrdinalIgnoreCase))
+        {
+            defaultTags.Add(trimmedTag);
+            var tagList = selectedTags.ToList();
+            tagList.Add(trimmedTag);
+            selectedTags = tagList;
+            newTag = "";
+        }
+        else
+        {
+            Snackbar.Add("This tag already exists", Severity.Warning);
+        }
+    }
+
+    private void RemoveTag(string tag)
+    {
+        var newTags = selectedTags.Where(t => t != tag).ToList();
+        selectedTags = newTags;
+        StateHasChanged();
+    }
+
+    private async Task HandleSubmit()
+    {
+        if (currentUser == null) return;
+
+        await form.Validate();
+        if (!success) return;
+
+        try
+        {
+            transaction.Tags = selectedTags.ToList();
+            transaction.Username = currentUser.Username;
+
+            if (transaction.Type == TransactionType.Debit)
+            {
+                var hasBalance = await TransactionService.HasSufficientBalanceAsync(
+                    currentUser.Username,
+                    transaction.Amount);
+
+                if (!hasBalance)
+                {
+                    Snackbar.Add("Insufficient balance for this transaction", Severity.Error);
+                    return;
+                }
+            }
+
+            var result = await TransactionService.AddTransactionAsync(currentUser.Username, transaction);
+            if (result)
+            {
+                Snackbar.Add("Transaction added successfully", Severity.Success);
+                NavigationManager.NavigateTo("/transactions");
+            }
+            else
+            {
+                Snackbar.Add("Failed to add transaction", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("An error occurred while saving the transaction", Severity.Error);
+            Console.WriteLine(ex);
+        }
+    }
+}

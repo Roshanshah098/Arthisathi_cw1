@@ -1,0 +1,117 @@
+﻿@inherits LayoutComponentBase
+@inject NavigationManager NavigationManager
+@inject IStorageService StorageService
+@implements IDisposable
+
+<MudThemeProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+<MudPopoverProvider />
+
+<MudLayout>
+    @if (showNavMenu)
+    {
+        <MudAppBar Elevation="1">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" 
+                          Color="Color.Inherit" 
+                          Edge="Edge.Start" 
+                          OnClick="@DrawerToggle" />
+            <MudText Typo="Typo.h6">Arthik Sathi</MudText>
+            <MudSpacer />
+            <MudIconButton Icon="@Icons.Material.Filled.Logout" 
+                          Color="Color.Inherit" 
+                          OnClick="HandleLogout" />
+        </MudAppBar>
+        <MudDrawer @bind-Open="_drawerOpen" 
+                  ClipMode="DrawerClipMode.Always" 
+                  Elevation="1" 
+                  Variant="@DrawerVariant.Persistent">
+            <MudDrawerHeader>
+                <MudText Typo="Typo.h6">Menu</MudText>
+            </MudDrawerHeader>
+            <MudNavMenu>
+                <MudNavLink Href=""
+                           Match="NavLinkMatch.All"
+                           Icon="@Icons.Material.Filled.Dashboard">
+                    Dashboard
+                </MudNavLink>
+                
+                <MudNavLink Href="transactions"
+                           Match="NavLinkMatch.Prefix"
+                           Icon="@Icons.Material.Filled.Receipt">
+                    Transactions
+                </MudNavLink>
+                
+                <MudNavLink Href="add-transaction"
+                           Match="NavLinkMatch.Prefix"
+                           Icon="@Icons.Material.Filled.AddCircle">
+                    Add Transaction
+                </MudNavLink>
+                
+                <MudDivider Class="my-2" />
+                
+                <MudNavLink Href="settings"
+                           Match="NavLinkMatch.Prefix"
+                           Icon="@Icons.Material.Filled.Settings">
+                    Settings
+                </MudNavLink>
+            </MudNavMenu>
+        </MudDrawer>
+    }
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool showNavMenu;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        NavigationManager.LocationChanged += HandleLocationChanged;
+        await CheckAuthState();
+    }
+
+    private async Task CheckAuthState()
+    {
+        var state = await StorageService.LoadStateAsync();
+        showNavMenu = state.CurrentUser != null;
+
+        var currentPath = new Uri(NavigationManager.Uri).LocalPath.ToLower(); 
+        if (!showNavMenu &&
+            !currentPath.Contains("login") &&
+            !currentPath.Contains("register"))
+        {
+            NavigationManager.NavigateTo("/login", true);
+        }
+    }
+
+    private void DrawerToggle()
+    {
+        _drawerOpen = !_drawerOpen;
+        StateHasChanged();
+    }
+
+    private async Task HandleLogout()
+    {
+        var state = await StorageService.LoadStateAsync();
+        state.CurrentUser = null;
+        await StorageService.SaveStateAsync(state);
+        showNavMenu = false;
+        NavigationManager.NavigateTo("/login", true);
+    }
+
+    private async void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        await CheckAuthState();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+    }
+}

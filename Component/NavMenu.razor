@@ -1,0 +1,39 @@
+﻿@using MudBlazor
+
+<MudNavMenu Color="Color.Primary" Style="width: 100%">
+    <div class="d-flex flex-column mud-width-full py-2">
+        <MudText Typo="Typo.subtitle2" Color="Color.Primary" Class="px-4 mb-4 mud-text-secondary">
+            MAIN MENU
+        </MudText>
+        
+        <MudNavLink Href=""
+                   Match="NavLinkMatch.All"
+                   Icon="@Icons.Material.Filled.Dashboard"
+                   IconColor="Color.Primary">
+            Dashboard
+        </MudNavLink>
+        
+        <MudNavLink Href="transactions"
+                   Match="NavLinkMatch.Prefix"
+                   Icon="@Icons.Material.Filled.Receipt"
+                   IconColor="Color.Primary">
+            Transactions
+        </MudNavLink>
+        
+        <MudNavLink Href="add-transaction"
+                   Match="NavLinkMatch.Prefix"
+                   Icon="@Icons.Material.Filled.AddCircle"
+                   IconColor="Color.Primary">
+            Add Transaction
+        </MudNavLink>
+        
+        <MudDivider Class="my-2" />
+        
+        <MudNavLink Href="settings"
+                   Match="NavLinkMatch.Prefix"
+                   Icon="@Icons.Material.Filled.Settings"
+                   IconColor="Color.Primary">
+            Settings
+        </MudNavLink>
+    </div>
+</MudNavMenu>

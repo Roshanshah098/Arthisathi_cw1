@@ -1,0 +1,98 @@
+@page "/transactions"
+@using arthiksathi.Models
+@using arthiksathi.Services
+@inject ITransactionService TransactionService
+@inject IStorageService StorageService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <MudPaper Class="pa-4">
+        <MudGrid>
+            <MudItem xs="12">
+                <div class="d-flex justify-space-between align-center mb-4">
+                    <MudText Typo="Typo.h5">Transactions</MudText>
+                    <MudButton Variant="Variant.Filled" 
+                             Color="Color.Primary" 
+                             StartIcon="@Icons.Material.Filled.Add"
+                             OnClick="@(() => NavigationManager.NavigateTo("/add-transaction"))">
+                        Add Transaction
+                    </MudButton>
+                </div>
+            </MudItem>
+
+            <!-- Transactions Table -->
+            <MudItem xs="12">
+                @if (transactions != null && transactions.Any())
+                {
+                    <MudTable Items="@transactions" Dense="true" Hover="true" Striped="true" Loading="@isLoading">
+                        <HeaderContent>
+                            <MudTh>Date</MudTh>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Source</MudTh>
+                            <MudTh>Amount</MudTh>
+                            <MudTh>Notes</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Date">@context.Date.ToShortDateString()</MudTd>
+                            <MudTd DataLabel="Type">@context.Type</MudTd>
+                            <MudTd DataLabel="Source">@context.Source</MudTd>
+                            <MudTd DataLabel="Amount">@context.Amount.ToString("C")</MudTd>
+                            <MudTd DataLabel="Notes">@(context.Notes ?? "-")</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info">No transactions found</MudAlert>
+                }
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private User? currentUser;
+    private List<Transaction> transactions = new();
+    private bool isLoading;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var state = await StorageService.LoadStateAsync();
+            currentUser = state.CurrentUser;
+
+            if (currentUser == null)
+            {
+                NavigationManager.NavigateTo("/login");
+                return;
+            }
+
+            await LoadTransactions();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error initializing page: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task LoadTransactions()
+    {
+        if (currentUser == null) return;
+
+        try
+        {
+            isLoading = true;
+            transactions = await TransactionService.GetTransactionsAsync(currentUser.Username);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading transactions: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

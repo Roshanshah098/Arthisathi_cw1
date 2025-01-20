@@ -1,0 +1,121 @@
+@page "/login"
+@inject IStorageService StorageService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="d-flex align-center justify-center" Style="height: 100vh;">
+    <MudPaper Elevation="3" Class="pa-8" Style="width: 500px;">
+        <MudText Typo="Typo.h4" Align="Align.Center" GutterBottom="true">Welcome to Arthik Sathi</MudText>
+        
+        <MudForm @ref="form" @bind-IsValid="@success">
+            <MudTextField T="string" 
+                         Label="Username" 
+                         @bind-Value="username"
+                         Class="mt-3"
+                         Required="true" 
+                         RequiredError="Username is required"/>
+                         
+            <MudTextField T="string" 
+                         Label="Password" 
+                         @bind-Value="password"
+                         InputType="InputType.Password"
+                         Class="mt-3"
+                         Required="true" 
+                         RequiredError="Password is required"/>
+
+            @if (isFirstTimeUser)
+            {
+                <MudSelect T="string" 
+                          Label="Preferred Currency" 
+                          @bind-Value="selectedCurrency" 
+                          Required="true"
+                          RequiredError="Currency is required"
+                          Class="mt-3">
+                    <MudSelectItem Value="@("USD")">USD ($)</MudSelectItem>
+                    <MudSelectItem Value="@("EUR")">EUR (€)</MudSelectItem>
+                    <MudSelectItem Value="@("GBP")">GBP (£)</MudSelectItem>
+                    <MudSelectItem Value="@("INR")">INR (₹)</MudSelectItem>
+                </MudSelect>
+            }
+
+            <div class="d-flex justify-space-between align-center mt-6">
+                <MudButton Variant="Variant.Filled" 
+                          Color="Color.Primary"
+                          OnClick="HandleSubmit"
+                          Size="Size.Large">
+                    @(isFirstTimeUser ? "Get Started" : "Login")
+                </MudButton>
+
+                @if (!isFirstTimeUser)
+                {
+                    <MudButton Variant="Variant.Text" 
+                              Color="Color.Secondary"
+                              OnClick="@(() => NavigationManager.NavigateTo("/register"))">
+                        Register
+                    </MudButton>
+                }
+            </div>
+        </MudForm>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private string username = "";
+    private string password = "";
+    private string selectedCurrency = "USD";
+    private bool success;
+    private bool isFirstTimeUser;
+    private MudForm form;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await StorageService.LoadStateAsync();
+        isFirstTimeUser = !state.Users.Any();
+    }
+
+    private async Task HandleSubmit()
+    {
+        await form.Validate();
+        if (!success) return;
+
+        try
+        {
+            if (isFirstTimeUser)
+            {
+                var newUser = new User
+                {
+                    Username = username,
+                    Password = password,
+                    PreferredCurrency = selectedCurrency
+                };
+
+                if (await StorageService.RegisterUser(newUser))
+                {
+                    var state = await StorageService.LoadStateAsync();
+                    state.CurrentUser = newUser;
+                    await StorageService.SaveStateAsync(state);
+                    NavigationManager.NavigateTo("/dashboard");
+                }
+            }
+            else
+            {
+                var user = await StorageService.AuthenticateUser(username, password);
+                if (user != null)
+                {
+                    var state = await StorageService.LoadStateAsync();
+                    state.CurrentUser = user;
+                    await StorageService.SaveStateAsync(state);
+                    NavigationManager.NavigateTo("/dashboard");
+                }
+                else
+                {
+                    Snackbar.Add("Invalid username or password", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("An error occurred. Please try again.", Severity.Error);
+        }
+    }
+}

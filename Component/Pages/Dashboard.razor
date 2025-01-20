@@ -1,0 +1,522 @@
+@page "/"
+@page "/dashboard"
+@using arthiksathi.Models
+@using arthiksathi.Services
+@inject ITransactionService TransactionService
+@inject IStorageService StorageService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    @if (currentUser != null && stats != null)
+    {
+        <MudOverlay Visible="@isLoading" DarkBackground="true" Absolute="true">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        </MudOverlay>
+
+        <MudGrid>
+            <!-- Financial Overview Cards -->
+            <MudItem xs="12" md="9">
+                <MudGrid>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle1">Total Inflows</MudText>
+                                <MudText Typo="Typo.h4" Color="Color.Success">
+                                    @FormatCurrency(stats.TotalInflows)
+                                </MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle1">Total Outflows</MudText>
+                                <MudText Typo="Typo.h4" Color="Color.Error">
+                                    @FormatCurrency(stats.TotalOutflows)
+                                </MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle1">Current Balance</MudText>
+                                <MudText Typo="Typo.h4" Color="@GetBalanceColor()">
+                                    @FormatCurrency(stats.TotalInflows - stats.TotalOutflows)
+                                </MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudItem>
+
+            <!-- Donut Chart -->
+            <MudItem xs="12" md="3">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Transaction Overview</MudText>
+                    <MudChart ChartType="ChartType.Pie"
+                              Width="200px"
+                              Height="200px"
+                              InputData="@(new double[] { (double)stats.TotalInflows, (double)stats.TotalOutflows, (double)stats.TotalDebts })"
+                              InputLabels="@(new[] { "Inflows", "Outflows", "Debts" })" />
+                </MudPaper>
+            </MudItem>
+
+            <!-- Debt Summary -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Debt Summary</MudText>
+                    <MudSimpleTable>
+                        <tbody>
+                            <tr>
+                                <td>Total Debts</td>
+                                <td>@FormatCurrency(stats.TotalDebts)</td>
+                            </tr>
+                            <tr>
+                                <td>Cleared Debts</td>
+                                <td class="mud-success-text">@FormatCurrency(stats.ClearedDebts)</td>
+                            </tr>
+                            <tr>
+                                <td>Remaining Debts</td>
+                                <td class="mud-warning-text">@FormatCurrency(stats.RemainingDebts)</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Date Range Filter -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Date Range Filter</MudText>
+                    <div class="d-flex flex-column gap-4">
+                        <MudDateRangePicker @bind-DateRange="dateRange"
+                                            Label="Select Date Range"
+                                            AdornmentColor="Color.Primary"
+                                            PickerVariant="PickerVariant.Static">
+                        </MudDateRangePicker>
+
+                        <div class="d-flex gap-2">
+                            <MudButton OnClick="ClearDateRange"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Secondary"
+                                       FullWidth="true">
+                                Clear Filter
+                            </MudButton>
+                            <MudButton OnClick="ApplyDateRange"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       FullWidth="true"> 
+                                Apply Filter
+                            </MudButton>
+                        </div>
+                    </div>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Recent Transactions -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Recent Transactions</MudText>
+                    <MudTable Items="@stats.TopTransactions" Dense="true" Hover="true" Striped="true"> 
+                        <HeaderContent>
+                            <MudTh>Date</MudTh>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Source</MudTh>
+                            <MudTh>Amount</MudTh>
+                            <MudTh>Tags</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Date">@context.Date.ToShortDateString()</MudTd>
+                            <MudTd DataLabel="Type">
+                                <MudText Color="@GetTypeColor(context.Type)">@context.Type</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Source">@context.Source</MudTd>
+                            <MudTd DataLabel="Amount">
+                                <MudText Color="@GetAmountColor(context)">
+                                    @FormatCurrency(context.Amount)
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Tags">
+                                @string.Join(", ", context.Tags.Take(3))
+                                @if (context.Tags.Count > 3)
+                                {
+                                    <span>...</span>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+    </MudContainer>
+
+    @code {
+    private User? currentUser;
+    private TransactionStats? stats;
+    private DateRange? dateRange;
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await StorageService.LoadStateAsync();
+        currentUser = state.CurrentUser;
+
+        if (currentUser == null)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        await LoadStats();
+    }
+
+    private async Task LoadStats()
+    {
+        if (currentUser == null) return;
+
+        try
+        {
+            var newStats = await TransactionService.GetStatsAsync(
+                currentUser.Username,
+                dateRange?.Start,
+                dateRange?.End);
+
+            stats = newStats;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading stats: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string FormatCurrency(decimal amount)
+    {
+        return amount.ToString("C", new System.Globalization.CultureInfo(
+            currentUser?.PreferredCurrency switch
+            {
+                "EUR" => "fr-FR",
+                "GBP" => "en-GB",
+                "INR" => "en-IN",
+                _ => "en-US"
+            }
+        ));
+    }
+
+    private Color GetTypeColor(TransactionType type) => type switch
+    {
+        TransactionType.Credit => Color.Success,
+        TransactionType.Debit => Color.Error,
+        _ => Color.Warning
+    };
+
+    private Color GetAmountColor(Transaction transaction) => transaction.Type switch
+    {
+        TransactionType.Credit => Color.Success,
+        TransactionType.Debit => Color.Error,
+        _ => Color.Warning
+    };
+
+    private Color GetBalanceColor()
+    {
+        if (stats == null) return Color.Default;
+        var balance = stats.TotalInflows - stats.TotalOutflows;
+        return balance switch
+        {
+            > 0 => Color.Success,
+            < 0 => Color.Error,
+            _ => Color.Info
+        };
+    }
+
+    private async Task ClearDateRange()
+    {
+        try
+        {
+            dateRange = null;
+            isLoading = true;
+            StateHasChanged();
+
+            await LoadStats();
+            Snackbar.Add("Date filter cleared", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error clearing filter: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ApplyDateRange()
+    {
+        try
+        {
+            if (dateRange == null || !dateRange.Start.HasValue || !dateRange.End.HasValue)
+            {
+                Snackbar.Add("Please select a valid date range", Severity.Warning);
+                return;
+            }
+
+            isLoading = true;
+            StateHasChanged();
+
+            await LoadStats();
+            Snackbar.Add($"Showing data from {dateRange.Start.Value:d} to {dateRange.End.Value:d}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error applying filter: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnDateRangeChanged(DateRange? range) 
+    {
+        dateRange = range;
+        // Don't automatically load stats here, wait for Apply button
+    }
+}
+
+
+@* older dashboard *@
+
+@* 
+
+@page "/"
+@page "/dashboard"
+@using arthiksathi.Models
+@using arthiksathi.Services
+@inject ITransactionService TransactionService
+@inject IStorageService StorageService
+@inject NavigationManager NavigationManager
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    @if (currentUser != null && stats != null)
+    {
+        <MudGrid>
+            <!-- Financial Overview Cards -->
+            <MudItem xs="12" md="9">
+                <MudGrid>
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle1">Total Inflows</MudText>
+                                <MudText Typo="Typo.h4" Color="Color.Success">
+                                    @FormatCurrency(stats.TotalInflows)
+                                </MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle1">Total Outflows</MudText>
+                                <MudText Typo="Typo.h4" Color="Color.Error">
+                                    @FormatCurrency(stats.TotalOutflows)
+                                </MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudStack>
+                                <MudText Typo="Typo.subtitle1">Current Balance</MudText>
+                                <MudText Typo="Typo.h4" Color="@GetBalanceColor()">
+                                    @FormatCurrency(stats.TotalInflows - stats.TotalOutflows)
+                                </MudText>
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudItem>
+
+            <!-- Donut Chart -->
+            <MudItem xs="12" md="3">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Transaction Overview</MudText>
+                    <MudChart ChartType="ChartType.Pie"
+                             Width="200px"
+                             Height="200px"
+                             InputData="@(new double[] { (double)stats.TotalInflows, (double)stats.TotalOutflows, (double)stats.TotalDebts })"
+                             InputLabels="@(new[] { "Inflows", "Outflows", "Debts" })" />
+                </MudPaper>
+            </MudItem>
+
+            <!-- Debt Summary -->
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Debt Summary</MudText>
+                    <MudSimpleTable>
+                        <tbody>
+                            <tr>
+                                <td>Total Debts</td>
+                                <td>@FormatCurrency(stats.TotalDebts)</td>
+                            </tr>
+                            <tr>
+                                <td>Cleared Debts</td>
+                                <td class="mud-success-text">@FormatCurrency(stats.ClearedDebts)</td>
+                            </tr>
+                            <tr>
+                                <td>Remaining Debts</td>
+                                <td class="mud-warning-text">@FormatCurrency(stats.RemainingDebts)</td>
+                            </tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudPaper>
+            </MudItem>
+
+            <!-- Recent Transactions with Date Range Filter -->
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-4">Recent Transactions</MudText>
+
+                    <!-- Date Range Filter -->
+                    <div class="d-flex align-center gap-4 mb-4">
+                        <MudDateRangePicker @bind-DateRange="dateRange"
+                                          Label="Filter by Date Range"
+                                          AdornmentColor="Color.Primary"
+                                          AnchorOrigin="Origin.BottomCenter"
+                                          TransformOrigin="Origin.TopCenter"
+                                          MaxHeight="300px">
+                            <PickerActions>
+                                <MudButton OnClick="@(() => dateRange = null)" Color="Color.Secondary">Clear</MudButton>
+                                <MudButton OnClick="FilterTransactions" Color="Color.Primary">Apply</MudButton>
+                            </PickerActions>
+                        </MudDateRangePicker>
+                    </div>
+
+                    <!-- Transactions Table -->
+                    <MudTable Items="@filteredTransactions" Dense="true" Hover="true" Striped="true">
+                        <HeaderContent>
+                            <MudTh>Date</MudTh>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Source</MudTh>
+                            <MudTh>Amount</MudTh>
+                            <MudTh>Tags</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Date">@context.Date.ToShortDateString()</MudTd>
+                            <MudTd DataLabel="Type">
+                                <MudText Color="@GetTypeColor(context.Type)">@context.Type</MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Source">@context.Source</MudTd>
+                            <MudTd DataLabel="Amount">
+                                <MudText Color="@GetAmountColor(context)">
+                                    @FormatCurrency(context.Amount)
+                                </MudText>
+                            </MudTd>
+                            <MudTd DataLabel="Tags">
+                                @string.Join(", ", context.Tags.Take(3))
+                                @if (context.Tags.Count > 3)
+                                {
+                                    <span>...</span>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private User? currentUser;
+    private TransactionStats? stats;
+    private DateRange? dateRange;
+    private List<Transaction> allTransactions = new();
+    private List<Transaction> filteredTransactions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await StorageService.LoadStateAsync();
+        currentUser = state.CurrentUser;
+
+        if (currentUser == null)
+        {
+            NavigationManager.NavigateTo("/login");
+            return;
+        }
+
+        // Load all transactions for the current user
+        allTransactions = await TransactionService.GetTransactionsAsync(currentUser.Username);
+        filteredTransactions = allTransactions; // Initially show all transactions
+
+        // Load stats
+        stats = await TransactionService.GetStatsAsync(currentUser.Username);
+    }
+
+    private void FilterTransactions()
+    {
+        if (dateRange == null)
+        {
+            // If no date range is selected, show all transactions
+            filteredTransactions = allTransactions;
+        }
+        else
+        {
+            // Filter transactions based on the selected date range
+            filteredTransactions = allTransactions
+                .Where(t => t.Date >= dateRange.Start && t.Date <= dateRange.End)
+                .ToList();
+        }
+
+        StateHasChanged(); // Update the UI
+    }
+
+    private string FormatCurrency(decimal amount)
+    {
+        return amount.ToString("C", new System.Globalization.CultureInfo(
+            currentUser?.PreferredCurrency switch
+            {
+                "EUR" => "fr-FR",
+                "GBP" => "en-GB",
+                "INR" => "en-IN",
+                _ => "en-US"
+            }
+        ));
+    }
+
+    private Color GetTypeColor(TransactionType type) => type switch
+    {
+        TransactionType.Credit => Color.Success,
+        TransactionType.Debit => Color.Error,
+        _ => Color.Warning
+    };
+
+    private Color GetAmountColor(Transaction transaction) => transaction.Type switch
+    {
+        TransactionType.Credit => Color.Success,
+        TransactionType.Debit => Color.Error,
+        _ => Color.Warning
+    };
+
+    private Color GetBalanceColor()
+    {
+        if (stats == null) return Color.Default;
+        var balance = stats.TotalInflows - stats.TotalOutflows;
+        return balance switch
+        {
+            > 0 => Color.Success,
+            < 0 => Color.Error,
+            _ => Color.Info
+        };
+    }
+}
+
+ *@ 
